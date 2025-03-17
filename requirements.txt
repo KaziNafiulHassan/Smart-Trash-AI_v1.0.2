@@ -1,0 +1,13 @@
+torch
+torchvision
+torchaudio
+flask
+werkzeug
+pandas
+numpy
+Pillow
+transformers
+streamlit
+plotly
+matplotlib
+# Note: tkinter comes pre-installed with Python, no need to add it to requirements.txt 

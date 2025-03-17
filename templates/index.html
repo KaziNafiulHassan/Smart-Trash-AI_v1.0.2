@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trash AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <video autoplay muted loop class="bg-video" onloadedmetadata="this.play();">
+        <source src="{{ url_for('static', filename='assets/bg-stars.mp4') }}" type="video/mp4">
+        Your browser does not support the video tag. <div style="background: linear-gradient(135deg, #1a1a2e, #0f3460); height: 100vh;"></div>
+    </video>
+    <div class="container">
+        <header>
+            <h1 class="neon-text">Smart Trash AI</h1>
+            <nav class="nav-orbit">
+                <button class="tab-btn active" data-tab="game">Sorting Galaxy</button>
+                <button class="tab-btn" data-tab="image">Image Scanner</button>
+                <button class="tab-btn" data-tab="chat">AI Companion</button>
+            </nav>
+        </header>
+
+        <!-- Sorting Game Tab -->
+        <section id="game-tab" class="tab-content active">
+            <div class="game-container">
+                <div class="performance-tracker">
+                    <span>Score: <span id="score" class="score">0/0</span></span> | 
+                    <span>Accuracy: <span id="accuracy" class="accuracy">0%</span></span>
+                </div>
+                <div class="item-orb" id="item-display">
+                    <img id="waste-display-image" src="" alt="Waste Item" style="display: none; max-width: 200px; margin-bottom: 10px;">
+                    <span class="item-text"></span>
+                </div>
+                <div class="bin-galaxy">
+                    <div class="mini-bin bio" data-bin="BioWaste">
+                        <div class="bin-color"></div>
+                        <span class="bin-name">BioWaste</span>
+                    </div>
+                    <div class="mini-bin paper" data-bin="PaperWaste">
+                        <div class="bin-color"></div>
+                        <span class="bin-name">Paper Waste</span>
+                    </div>
+                    <div class="mini-bin plastic" data-bin="LightweightPackaging_LVP">
+                        <div class="bin-color"></div>
+                        <span class="bin-name">Packaging</span>
+                    </div>
+                    <div class="mini-bin glass" data-bin="Depot_Container_Glass">
+                        <div class="bin-color"></div>
+                        <span class="bin-name">Glass</span>
+                    </div>
+                    <div class="mini-bin residual" data-bin="ResidualWaste">
+                        <div class="bin-color"></div>
+                        <span class="bin-name">Residual</span>
+                    </div>
+                </div>
+                <div id="feedback" class="feedback"></div>
+                <button id="next-item" class="futuristic-btn pulse">Next Challenge</button>
+            </div>
+        </section>
+
+        <!-- Image Recognition Tab -->
+        <section id="image-tab" class="tab-content">
+            <div class="image-container">
+                <div class="upload-pod">
+                    <input type="file" id="waste-image" accept="image/*" class="futuristic-input neon-border">
+                    <button id="analyze-btn" class="futuristic-btn pulse">Scan Waste</button>
+                </div>
+                <div id="image-result" class="result-pod">
+                    <img id="uploaded-image" src="" alt="Uploaded Waste" class="image-scan">
+                    <div id="prediction" class="neon-text"></div>
+                    <select id="user-bin" class="futuristic-input neon-border">
+                        <option value="">Select Bin</option>
+                        <option value="BioWaste">BioWaste</option>
+                        <option value="PaperWaste">PaperWaste</option>
+                        <option value="LightweightPackaging_LVP">Lightweight Packaging</option>
+                        <option value="Depot_Container_Glass">Glass</option>
+                        <option value="ResidualWaste">Residual Waste</option>
+                    </select>
+                    <button id="submit-bin" class="futuristic-btn pulse">Submit Choice</button>
+                    <div id="comparison-result" class="neon-text"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Tab -->
+        <section id="chat-tab" class="tab-content">
+            <div class="chat-container">
+                <div id="chat-messages" class="chat-matrix"></div>
+                <div class="chat-input-group">
+                    <input type="text" id="chat-input" placeholder="Talk to Your AI Companion..." class="futuristic-input neon-border">
+                    <button id="send-chat" class="futuristic-btn pulse">Transmit</button>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sorting_game.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/image_recognition.js') }}"></script>
+</body>
+</html>

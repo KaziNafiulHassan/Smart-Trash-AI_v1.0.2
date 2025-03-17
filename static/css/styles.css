@@ -1,0 +1,440 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Orbitron', sans-serif;
+    color: #e0e0e0;
+    overflow-x: hidden;
+    position: relative;
+}
+
+.bg-video {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -1;
+    opacity: 0.8;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px;
+    position: relative;
+    z-index: 1;
+}
+
+.neon-text {
+    color: #00ffcc;
+    text-shadow: 0 0 5px #00ffcc, 0 0 10px #00ffcc, 0 0 20px #00ffcc;
+    animation: flicker 1.5s infinite alternate;
+}
+
+/* Login Styles */
+.login-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: rgba(10, 10, 30, 0.7);
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+}
+
+.futuristic-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1.1em;
+    transition: all 0.3s ease;
+}
+
+.neon-border:focus {
+    outline: none;
+    box-shadow: 0 0 15px #00ffcc;
+    border: 1px solid #00ffcc;
+}
+
+.futuristic-btn {
+    background: linear-gradient(45deg, #00ffcc, #ff00ff);
+    border: none;
+    padding: 12px 25px;
+    border-radius: 25px;
+    color: #1a1a2e;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.futuristic-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.8);
+}
+
+.pulse {
+    animation: pulse 1.5s infinite;
+}
+
+/* Header and Navigation */
+.nav-orbit {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.tab-btn {
+    background: linear-gradient(45deg, #0f3460, #1a1a2e);
+    border: 2px solid #00ffcc;
+    padding: 12px 25px;
+    border-radius: 30px;
+    color: #e0e0e0;
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: all 0.4s ease;
+}
+
+.tab-btn:hover, .tab-btn.active {
+    background: linear-gradient(45deg, #00ffcc, #ff00ff);
+    color: #1a1a2e;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.8);
+    transform: translateY(-5px);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.5s ease-in;
+}
+
+/* Sorting Game Styles */
+.game-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.item-orb {
+    width: 350px; /* As updated previously */
+    height: 350px; /* As updated previously */
+    background: radial-gradient(circle, #00ffcc, #1a1a2e);
+    border-radius: 50%;
+    margin: 0 auto 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(0, 255, 204, 0.7);
+    animation: glowPulse 2s infinite ease-in-out;
+    padding: 20px;
+    overflow: hidden; /* Prevents overflow */
+    position: relative; /* Ensures proper layering */
+}
+
+/* Style the image to fit inside the orb */
+.item-orb img {
+    max-width: 100%; /* Scales to fit the orb's width */
+    max-height: 70%; /* Limits height to 70% of orb to leave space for text */
+    width: auto; /* Maintains aspect ratio */
+    height: auto; /* Maintains aspect ratio */
+    object-fit: contain; /* Ensures the entire image is visible within bounds */
+    border-radius: 10px; /* Optional: slight rounding for aesthetics */
+    margin-bottom: 15px; /* Space for text below */
+}
+
+/* Adjust text to fit below image */
+.item-text {
+    font-size: 1.8em;
+    color: #1a1a2e;
+    text-shadow: 0 0 10px #ffffff;
+    text-align: center;
+    padding: 0 10px; /* Prevents text from touching edges */
+    word-wrap: break-word; /* Ensures long text wraps */
+}
+
+.bin-galaxy {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    perspective: 1000px;
+    margin: 20px 0;
+}
+
+/* Mini bin styling adapted from your code */
+.mini-bin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    background-color: #ffffff; /* White background like the image */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    width: 80px; /* Adjusted to fit smaller icons */
+    height: 100px; /* Adjusted height for proportion */
+}
+
+.mini-bin:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Bin color block (replacing bin-icon) */
+.bin-color {
+    width: 50px; /* Slightly larger than 40px for visibility */
+    height: 50px; /* Adjusted to match icon height */
+    border-radius: 4px;
+    margin-bottom: 5px;
+    transition: transform 0.3s ease;
+}
+
+/* Bin label */
+.bin-name {
+    font-size: 0.8em;
+    text-align: center;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+/* Specific bin colors matching the attached image */
+.mini-bin.bio .bin-color {
+    background-color: #8B4513; /* Brown for BioWaste */
+}
+
+.mini-bin.paper .bin-color {
+    background-color: #1E90FF; /* Blue for PaperWaste */
+}
+
+.mini-bin.plastic .bin-color {
+    background-color: #FFD700; /* Yellow for Packaging */
+}
+
+.mini-bin.glass .bin-color {
+    background-color: #228B22; /* Green for Glass */
+}
+
+.mini-bin.residual .bin-color {
+    background-color: #333333; /* Black for ResidualWaste */
+}
+
+/* Animation integration from your code */
+.mini-bin:hover .bin-color {
+    animation: binWiggle 0.5s ease;
+}
+
+.mini-bin.correct .bin-color {
+    animation: binBounce 0.5s ease, correctGlow 1s ease infinite;
+}
+
+.mini-bin.incorrect .bin-color {
+    animation: incorrectShake 0.5s ease;
+}
+
+/* Define animations (already in your code, just ensuring they’re included) */
+@keyframes binWiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-5deg); }
+    75% { transform: rotate(5deg); }
+}
+
+@keyframes binBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes correctGlow {
+    0% { filter: drop-shadow(0 0 5px rgba(75, 192, 192, 0.5)); }
+    50% { filter: drop-shadow(0 0 15px rgba(75, 192, 192, 0.8)); }
+    100% { filter: drop-shadow(0 0 5px rgba(75, 192, 192, 0.5)); }
+}
+
+@keyframes incorrectShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+
+.feedback.correct {
+    margin: 20px 0;
+    font-size: 1.5em;
+    color: #ffffff;
+    text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+    animation: fadeIn 0.5s ease-in;
+}
+
+.feedback.incorrect {
+    margin: 20px 0;
+    font-size: 1.5em;
+    color: #ffffff;
+    text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+    animation: fadeIn 0.5s ease-in;
+}
+
+/* Performance Tracker Styles */
+.performance-tracker {
+    background: rgba(10, 10, 30, 0.7);
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+    margin-bottom: 20px;
+    color: #e0e0e0;
+    font-size: 1.2em;
+    text-align: center;
+}
+
+.performance-tracker .score {
+    color: #00ffcc;
+}
+
+.performance-tracker .accuracy {
+    color: #ff00ff;
+}
+
+/* Image Recognition Styles */
+.image-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.upload-pod {
+    background: rgba(10, 10, 30, 0.7);
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+    display: inline-block;
+}
+
+.result-pod {
+    margin-top: 30px;
+    background: rgba(10, 10, 30, 0.7);
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+    animation: slideIn 0.5s ease-in;
+}
+
+.result-pod.correct {
+    color: #ffffff;
+    text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+}
+
+.result-pod.incorrect {
+    color: #ffffff;
+    text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+}
+
+.image-scan {
+    max-width: 300px;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+    margin-bottom: 20px;
+}
+
+/* Chat Styles */
+.chat-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.chat-matrix {
+    height: 500px;
+    background: rgba(10, 10, 30, 0.8);
+    border-radius: 15px;
+    padding: 20px;
+    overflow-y: auto;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+}
+
+.chat-message {
+    margin: 10px;
+    padding: 15px;
+    border-radius: 10px;
+    max-width: 70%;
+    animation: messagePop 0.3s ease-in;
+}
+
+.user-message {
+    background: linear-gradient(45deg, #00ffcc, #ff00ff);
+    color: #1a1a2e;
+    margin-left: auto;
+}
+
+.ai-message {
+    background: linear-gradient(45deg, #0f3460, #1a1a2e);
+    color: #e0e0e0;
+    margin-right: auto;
+}
+
+.chat-input-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Animations */
+@keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.7); }
+    70% { box-shadow: 0 0 0 20px rgba(0, 255, 204, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); }
+}
+
+@keyframes glowPulse {
+    0% { box-shadow: 0 0 10px rgba(0, 255, 204, 0.7); }
+    50% { box-shadow: 0 0 30px rgba(0, 255, 204, 1); }
+    100% { box-shadow: 0 0 10px rgba(0, 255, 204, 0.7); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateY(50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes messagePop {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shakeSuccess {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-10px); }
+    40%, 80% { transform: translateX(10px); }
+}
+
+@keyframes shakeError {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+}

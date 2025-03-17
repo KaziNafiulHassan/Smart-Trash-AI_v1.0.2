@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trash AI - Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <video autoplay muted loop class="bg-video" onloadedmetadata="this.play();">
+        <source src="{{ url_for('static', filename='assets/bg-stars.mp4') }}" type="video/mp4">
+        Your browser does not support the video tag. <div style="background: linear-gradient(135deg, #1a1a2e, #0f3460); height: 100vh;"></div>
+    </video>
+    <div class="login-container">
+        <h1 class="neon-text">Smart Trash AI</h1>
+        <form method="POST" class="login-form">
+            <input type="text" name="username" placeholder="Username" required class="futuristic-input neon-border">
+            <input type="text" name="nationality" placeholder="Nationality" required class="futuristic-input neon-border">
+            <button type="submit" class="futuristic-btn pulse">Enter the Future</button>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
