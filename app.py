@@ -20,8 +20,9 @@ from torchvision import models
 from PIL import Image, UnidentifiedImageError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np  # Required for cosine_similarity
 
-from database_manager import (
+from neo4j_manager import (
     init_db, add_new_user, get_user_by_username,
     log_sorting_attempt, log_chat, log_image_recognition
 )
@@ -56,16 +57,16 @@ resnet_model = None
 
 FUNNY_TIPS = {
     'correct': [
-        "Nailed it! You’re a recycling rockstar—keep rocking that bin!",
+        "Nailed it! You're a recycling rockstar—keep rocking that bin!",
         "Perfect! Even the trash cans are clapping for you!",
-        "Spot on! You’re sorting like a pro—Mother Earth says thanks!",
+        "Spot on! You're sorting like a pro—Mother Earth says thanks!",
         "Boom! You just made the planet a little happier!",
     ],
     'incorrect': [
-        "Oops! That bin’s crying now—better luck next time!",
-        "Yikes! That’s the wrong bin—don’t make the trash jealous!",
+        "Oops! That bin's crying now—better luck next time!",
+        "Yikes! That's the wrong bin—don't make the trash jealous!",
         "Uh-oh! You just confused the recycling gods!",
-        "Not quite! That bin’s like, ‘I’m not your type!’",
+        "Not quite! That bin's like, 'I'm not your type!'",
     ]
 }
 
@@ -91,8 +92,8 @@ def login():
         
         user_record = get_user_by_username(username)
         if user_record:
-            session['user_id'] = user_record[0]
-            session['username'] = user_record[1]
+            session['user_id'] = user_record['user_id']
+            session['username'] = user_record['username']
         else:
             user_id = add_new_user(username, nationality)
             session['user_id'] = user_id
@@ -234,23 +235,47 @@ class ConversationContext:
 
 def generate_response(user_message: str, context: ConversationContext) -> str:
     """Generate AI response based on user message"""
-    message_lower = user_message.lower()
-    if 'hello' in message_lower or 'hi' in message_lower:
-        return 'Hello! I\'m your waste sorting assistant. How can I help you today?'
-    
-    waste_items = [item.lower() for item in waste_data['Waste_Item'].tolist()]
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform([item.replace('_', ' ') for item in waste_items])
-    user_vec = vectorizer.transform([user_message])
-    
-    similarities = cosine_similarity(user_vec, tfidf_matrix).flatten()
-    if max(similarities) > 0.3:
-        idx = similarities.argmax()
-        item = waste_items[idx]
-        info = waste_map.get(item)
-        return f"{item.replace('_', ' ')} goes in the {info['color']} {info['container']} bin."
-    
-    return "I'm here to help with waste sorting. What would you like to know?"
+    try:
+        message_lower = user_message.lower()
+        if 'hello' in message_lower or 'hi' in message_lower:
+            return 'Hello! I\'m your waste sorting assistant. How can I help you today?'
+        
+        # Get waste items from the dataset
+        waste_items = [item.lower() for item in waste_data['Waste_Item'].tolist()]
+        
+        # Create TF-IDF vectorizer
+        try:
+            vectorizer = TfidfVectorizer()
+            item_texts = [item.replace('_', ' ') for item in waste_items]
+            
+            # Handle empty input
+            if not item_texts:
+                return "I'm having trouble accessing the waste data. Please try again later."
+            
+            tfidf_matrix = vectorizer.fit_transform(item_texts)
+            user_vec = vectorizer.transform([user_message])
+            
+            # Calculate similarity
+            similarities = cosine_similarity(user_vec, tfidf_matrix).flatten()
+            
+            # If there's a good match
+            if max(similarities) > 0.3:
+                idx = similarities.argmax()
+                item = waste_items[idx]
+                info = waste_map.get(item)
+                
+                if info:
+                    return f"{item.replace('_', ' ')} goes in the {info['color']} {info['container']} bin."
+                else:
+                    return f"I recognize {item.replace('_', ' ')} but don't have disposal information for it."
+        except Exception as e:
+            logger.error(f"Error in text processing: {str(e)}")
+            return "I'm having trouble processing your request. Could you try rephrasing?"
+        
+        return "I'm here to help with waste sorting. You can ask me which bin a specific item goes in."
+    except Exception as e:
+        logger.error(f"General error in generate_response: {str(e)}")
+        return "Sorry, I encountered an error. Please try again."
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -264,16 +289,25 @@ def chat():
         if not user_message:
             return jsonify({'response': 'No message provided'}), 400
         
+        logger.info(f"Chat request received: {user_message}")
+        
         context = ConversationContext()
         response = generate_response(user_message, context)
-        log_chat(session['user_id'], user_message, response)
+        
+        # Log chat to Neo4j
+        try:
+            log_chat(session['user_id'], user_message, response)
+        except Exception as e:
+            logger.error(f"Failed to log chat: {str(e)}")
+            # Continue even if logging fails
+        
         context.add_message('user', user_message)
         context.add_message('ai', response)
         
         return jsonify({'response': response})
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Sorry, I encountered an error processing your request.'}), 500
 
 # === Image Recognition ===
 def load_resnet_model() -> bool:
@@ -364,6 +398,9 @@ def analyze_image():
         )
         
         session['last_confidence'] = confidence
+        session['last_image_path'] = file.filename if file.filename else 'uploaded_image'
+        session['last_predicted_bin'] = predicted_class
+        
         encoded_image = base64.b64encode(image_bytes).decode('utf-8')
         logger.info(f"Encoded image length: {len(encoded_image)}")
         
@@ -374,7 +411,6 @@ def analyze_image():
             'container_details': container_details,
             'image': encoded_image
         }
-        logger.info(f"Response: {response}")
         return jsonify(response)
     except Exception as e:
         logger.error(f"Image analysis error: {str(e)}")
@@ -405,4 +441,5 @@ def verify_prediction():
 # === Main Execution ===
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=5001, use_reloader=False)
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=False)
