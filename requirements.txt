@@ -10,4 +10,9 @@ transformers
 streamlit
 plotly
 matplotlib
+gunicorn
+neo4j
+python-dotenv
+networkx
+scikit-learn
 # Note: tkinter comes pre-installed with Python, no need to add it to requirements.txt 

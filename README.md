@@ -9,6 +9,7 @@ An interactive web application that educates users on proper waste sorting throu
 - **Image Recognition**: Upload images of waste items to get AI-powered sorting suggestions using a pre-trained ResNet model.
 - **Progress Tracking**: Track your learning progress and identify areas that need improvement.
 - **Analytics Dashboard**: Visualize user interactions, performance metrics, and system statistics through an interactive Streamlit dashboard.
+- **Knowledge Graph**: View relationships between users, waste items, and interactions in a powerful Neo4j graph database.
 - **Data Collection**: All user interactions are logged for analysis and improving the system.
 
 ## Technology Stack
@@ -18,11 +19,22 @@ An interactive web application that educates users on proper waste sorting throu
 - **Machine Learning**: 
   - scikit-learn for natural language processing and similarity matching
   - PyTorch with a pre-trained ResNet model for image recognition
-- **Database**: SQLite for storing user interactions and feedback
+- **Database**: Neo4j AuraDB for graph-based data storage
 - **Analytics**: Streamlit and Plotly for the interactive dashboard
 - **Deployment**: Docker support for easy deployment
 
 ## Installation & Setup
+
+### Prerequisites
+
+1. **Neo4j AuraDB Account**:
+   - Sign up for a free [Neo4j AuraDB account](https://neo4j.com/cloud/aura/)
+   - Create a new database instance (free tier is sufficient)
+   - Keep your connection details (URI, username, password) handy
+
+2. **Copy Environment Variables**:
+   - Copy `.env.example` to `.env`
+   - Fill in your Neo4j AuraDB credentials in the `.env` file
 
 ### Standard Setup
 
@@ -49,9 +61,11 @@ An interactive web application that educates users on proper waste sorting throu
    pip install -r requirements.txt
    ```
 
-4. Initialize the database:
+4. Initialize the Neo4j database:
    
-   The application uses SQLite and will automatically create the database on first run.
+   ```
+   python setup_neo4j.py
+   ```
 
 5. Run the application:
 
@@ -80,12 +94,16 @@ An interactive web application that educates users on proper waste sorting throu
 
 ## Database Structure
 
-The application uses SQLite to store user interactions. The database contains:
+The application uses Neo4j AuraDB to store user interactions as a knowledge graph with the following node types:
 
-- **users**: Basic user information including nationality
-- **sorting_game_logs**: Records of user waste sorting attempts
-- **chat_logs**: Records of conversations with the AI assistant
-- **image_recognition_logs**: Records of image uploads and AI predictions
+- **User**: User information including nationality
+- **WasteItem**: Waste items from the classification dataset
+- **Bin**: Different types of waste bins (e.g., BioWaste, PaperWaste)
+- **SortingAttempt**: Records of waste sorting attempts
+- **ChatInteraction**: Records of conversations with the AI assistant
+- **ImageRecognition**: Records of image uploads and AI predictions
+
+Relationships between nodes represent various interactions, creating a rich knowledge graph that can be analyzed and visualized.
 
 ## Analytics Dashboard
 
@@ -101,6 +119,9 @@ The application includes a Streamlit analytics dashboard that provides insights 
    - **User Analytics**: Statistics on user signups and nationality distribution
    - **Sorting Game Analytics**: Performance metrics for different waste items and overall accuracy
    - **Image Recognition Analytics**: Analysis of AI-user agreement rates for different waste bins
+   - **Chat Analytics**: Insights into user questions and topics
+   - **Knowledge Graph**: Interactive visualization of the data relationships
+   - **User Journey**: Detailed analysis of individual user learning paths
 
 ## How to Use
 
@@ -125,6 +146,17 @@ The application includes a Streamlit analytics dashboard that provides insights 
 3. The AI will predict which bin the item belongs in
 4. Verify if you agree with the prediction to help improve the system
 
+## Migration from SQLite
+
+If you're upgrading from the SQLite version:
+
+1. Ensure your SQLite database file (`app_data.db`) is in the project directory
+2. Run the migration script:
+   ```
+   python setup_neo4j.py
+   ```
+3. Follow the prompts to migrate your existing data to Neo4j
+
 ## Extending the Dataset
 
 The application uses a CSV file (`waste_classification.csv`) as its knowledge base. You can extend this by adding more rows to the file with the following format:
@@ -138,8 +170,9 @@ For image recognition, place new waste item images in the `static/waste_images/`
 ## Project Structure
 
 - **app.py**: Main Flask application with routes and core functionality
-- **database_manager.py**: SQLite database interface
+- **neo4j_manager.py**: Neo4j database interface for knowledge graph storage
 - **dashboard_app.py**: Streamlit analytics dashboard
+- **setup_neo4j.py**: Setup and migration script for Neo4j
 - **templates/**: HTML templates for the web interface
 - **static/**: CSS, JavaScript, and image assets
 - **models/**: Pre-trained machine learning models

@@ -1,10 +1,12 @@
 version: '3.4'
 
 services:
-  smarttrashaiver10:
-    image: smarttrashaiver10
+  smart-trash-ai:
+    image: smart-trash-ai
     build:
       context: .
       dockerfile: ./Dockerfile
     ports:
       - 5001:5001
+    env_file:
+      - .env

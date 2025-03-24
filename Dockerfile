@@ -1,5 +1,5 @@
 # For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3-slim
+FROM python:3.9-slim
 
 EXPOSE 5001
 
@@ -19,6 +19,10 @@ COPY . /app
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
 RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
+
+# Make sure the .env file is available and properly formatted in the container
+RUN if [ ! -f .env ]; then echo "WARNING: .env file not found. Using environment variables from host."; fi
+
 USER appuser
 
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
