@@ -338,28 +338,66 @@ def chat():
         return jsonify({'error': 'Sorry, I encountered an error processing your request.'}), 500
 
 # === Image Recognition ===
+def cleanup_memory():
+    """Force garbage collection and clear memory caches"""
+    import gc
+    import torch
+    
+    # Clear PyTorch cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    # Force garbage collection
+    gc.collect()
+    
+    logger.info("Memory cleanup performed")
+
 def load_resnet_model():
-    """Load the ResNet model with error handling and retry logic"""
+    """Load the ResNet model with fallback to pre-trained if fine-tuned model is missing"""
     global resnet_model
     
     if resnet_model is not None:
         return True
+    
+    # Clean up memory before loading model
+    cleanup_memory()
+    
+    # Check if the fine-tuned model file exists
+    model_path = os.path.join('models', 'resnet.pth')
+    use_pretrained_fallback = not os.path.exists(model_path)
+    
+    if use_pretrained_fallback:
+        logger.warning(f"Fine-tuned model file {model_path} not found, using pre-trained ResNet18 as fallback")
+    else:
+        logger.info(f"Loading fine-tuned ResNet model from {model_path}...")
     
     max_retries = 3
     retry_count = 0
     
     while retry_count < max_retries:
         try:
-            logger.info("Loading ResNet model...")
-            # Load a pre-trained ResNet model
-            model = models.resnet50(weights='IMAGENET1K_V1')
+            # Load ResNet18 model
+            if use_pretrained_fallback:
+                # Use pre-trained weights if no fine-tuned model is available
+                model = models.resnet18(weights='IMAGENET1K_V1')
+            else:
+                # Load without pre-trained weights, we'll load our fine-tuned weights
+                model = models.resnet18(weights=None)
             
             # Modify the final layer for our 5 waste categories
-            num_ftrs = model.fc.in_features
-            model.fc = torch.nn.Linear(num_ftrs, len(class_names))
+            model.fc = torch.nn.Linear(model.fc.in_features, len(class_names))
+            
+            # Load the fine-tuned weights if available
+            if not use_pretrained_fallback:
+                model.load_state_dict(torch.load(model_path, map_location='cpu'))
+                logger.info("Fine-tuned weights loaded successfully")
             
             # Set model to evaluation mode
             model.eval()
+            
+            # Force garbage collection to free memory
+            import gc
+            gc.collect()
             
             resnet_model = model
             logger.info("ResNet model loaded successfully")
@@ -377,11 +415,17 @@ def load_resnet_model():
     return False
 
 def preprocess_image(image_bytes: bytes):
-    """Preprocess image for model prediction"""
+    """Preprocess image for model prediction with memory optimization"""
     try:
         # Try to open the image with PIL
         try:
+            # Use a smaller initial size to reduce memory usage
             image = Image.open(io.BytesIO(image_bytes))
+            
+            # Immediately resize to a smaller size to reduce memory usage
+            if max(image.size) > 400:
+                image.thumbnail((400, 400), Image.LANCZOS)
+                logger.info(f"Resized image to {image.size} to save memory")
         except UnidentifiedImageError:
             logger.error("Cannot identify image file format")
             return None, "Cannot identify image file format. Please upload a valid image file."
@@ -394,16 +438,20 @@ def preprocess_image(image_bytes: bytes):
             image = image.convert('RGB')
             logger.info(f"Converted image from {image.mode} to RGB")
         
-        # Resize and normalize
+        # Use a simpler transformation pipeline to reduce memory usage
         preprocess = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
+            transforms.Resize(224),  # Single resize instead of resize + center crop
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
         
         # Apply transformations
         image_tensor = preprocess(image).unsqueeze(0)
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
+        
         return image_tensor, None
     except Exception as e:
         logger.error(f"Error preprocessing image: {str(e)}")
@@ -411,19 +459,57 @@ def preprocess_image(image_bytes: bytes):
 
 def predict_container(image_tensor: torch.Tensor) -> Tuple[Optional[str], float]:
     if not load_resnet_model():
-        logger.error("Failed to load ResNet model")
+        logger.error("Failed to load model")
         return None, 0.0
     
-    with torch.no_grad():
-        outputs = resnet_model(image_tensor)
-        probs = torch.nn.functional.softmax(outputs, dim=1)[0]
-        confidence, predicted = torch.max(probs, 0)
-        logger.info(f"Prediction: {class_names[predicted.item()]}, confidence: {confidence.item() * 100}%")
-        return class_names[predicted.item()], confidence.item() * 100
+    try:
+        # Use torch.no_grad to reduce memory usage during inference
+        with torch.no_grad():
+            # Run the prediction with a timeout using threading (works on Windows)
+            import threading
+            import queue
+            
+            result_queue = queue.Queue()
+            
+            def prediction_worker():
+                try:
+                    # Run the prediction
+                    outputs = resnet_model(image_tensor)
+                    _, predicted = torch.max(outputs, 1)
+                    
+                    # Get the confidence scores using softmax
+                    probabilities = torch.nn.functional.softmax(outputs, dim=1)[0]
+                    confidence = probabilities[predicted[0]].item() * 100
+                    
+                    # Get the predicted class name
+                    predicted_class = class_names[predicted[0]]
+                    
+                    # Put the result in the queue
+                    result_queue.put((predicted_class, confidence))
+                except Exception as e:
+                    logger.error(f"Error in prediction worker: {str(e)}")
+                    result_queue.put((None, 0.0))
+            
+            # Start the prediction in a separate thread
+            prediction_thread = threading.Thread(target=prediction_worker)
+            prediction_thread.daemon = True
+            prediction_thread.start()
+            
+            # Wait for the result with a timeout
+            try:
+                # 30-second timeout
+                result = result_queue.get(timeout=30)
+                return result
+            except queue.Empty:
+                logger.error("Prediction timed out after 30 seconds")
+                return None, 0.0
+    except Exception as e:
+        logger.error(f"Error in prediction: {str(e)}")
+        return None, 0.0
 
 @app.route('/analyze_image', methods=['POST'])
 def analyze_image():
-    """Handle image upload and classification"""
+    """Handle image upload and classification with memory optimization"""
     if 'user_id' not in session:
         logger.error("Not logged in")
         return jsonify({'error': 'Not logged in'}), 401
@@ -449,31 +535,29 @@ def analyze_image():
         # Log file details
         logger.info(f"Received file: {file.filename}, size: {file_size} bytes")
         
-        # Check if file is too large (10MB limit)
-        if file_size > 10 * 1024 * 1024:  # 10MB
+        # Check if file is too large (5MB limit - reduced from 10MB)
+        if file_size > 5 * 1024 * 1024:  # 5MB
             logger.error(f"File too large: {file_size} bytes")
-            return jsonify({'error': 'File too large. Maximum size is 10MB'}), 413
+            return jsonify({'error': 'File too large. Maximum size is 5MB'}), 413
         
-        # Read the file in chunks to avoid memory issues
-        chunks = []
-        chunk_size = 1024 * 1024  # 1MB chunks
-        while True:
-            chunk = file.read(chunk_size)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        
-        image_bytes = b''.join(chunks)
+        # Read the file in one go for small files
+        image_bytes = file.read()
         logger.info(f"Image bytes length: {len(image_bytes)}")
         
         # Process the image
         try:
+            # Preprocess image (this now includes resizing to save memory)
             image_tensor, error = preprocess_image(image_bytes)
             
             if error:
                 logger.error(f"Image preprocessing error: {error}")
                 return jsonify({'error': error}), 400
             
+            # Force garbage collection before prediction
+            import gc
+            gc.collect()
+            
+            # Predict waste container
             predicted_class, confidence = predict_container(image_tensor)
             if not predicted_class:
                 logger.error("Prediction failed, no predicted class")
@@ -481,11 +565,16 @@ def analyze_image():
             
             logger.info(f"Predicted class: {predicted_class}, confidence: {confidence:.2f}%")
             
-            # Find container details
+            # Find container details - simplified to reduce memory usage
             container_details = {}
             for _, row in waste_data.iterrows():
                 if row['Waste_Containers_Type'] == predicted_class:
-                    container_details = dict(row)
+                    # Only include essential fields
+                    container_details = {
+                        'Waste_Containers_Type': row['Waste_Containers_Type'],
+                        'Bin_Color': row['Bin_Color'],
+                        'Category': row['Category']
+                    }
                     break
             
             # Store in session
@@ -496,18 +585,23 @@ def analyze_image():
             # Compress the image before encoding to reduce size
             try:
                 img = Image.open(io.BytesIO(image_bytes))
-                # Resize to a reasonable size if it's too large
-                if max(img.size) > 800:
-                    img.thumbnail((800, 800))
-                # Compress the image
+                # Resize to a smaller size to reduce memory usage
+                img.thumbnail((300, 300))
+                # Compress the image with higher compression
                 output_buffer = io.BytesIO()
-                img.save(output_buffer, format='JPEG', quality=70)
+                img.save(output_buffer, format='JPEG', quality=50)
                 compressed_bytes = output_buffer.getvalue()
                 encoded_image = base64.b64encode(compressed_bytes).decode('utf-8')
+                
+                # Clear variables to free memory
+                output_buffer = None
+                compressed_bytes = None
+                img = None
+                gc.collect()
             except Exception as img_err:
                 logger.error(f"Image compression error: {str(img_err)}")
-                # Fall back to the original image if compression fails
-                encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+                # Don't return the image if compression fails
+                encoded_image = ""
             
             logger.info(f"Encoded image length: {len(encoded_image)}")
             
@@ -518,6 +612,10 @@ def analyze_image():
                 'container_details': container_details,
                 'image': encoded_image
             }
+            
+            # Force garbage collection before returning
+            gc.collect()
+            
             return jsonify(response)
         except Exception as process_err:
             logger.error(f"Image processing error: {str(process_err)}")
