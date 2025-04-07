@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, basic_auth
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,51 +33,66 @@ class Neo4jManager:
         """Initialize the Neo4j database connection."""
         if not all([NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD]):
             logger.error("Neo4j connection details not fully provided in environment variables.")
-            raise ValueError("Missing Neo4j connection details")
+            raise ValueError("Missing Neo4j connection details. Please check NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD environment variables.")
         
         # Extract hostname for DNS check
         try:
             hostname = NEO4J_URI.split("://")[1].split(":")[0]
             logger.info(f"Attempting to connect to Neo4j at {hostname}")
             
-            # Simple DNS check
+            # Simple DNS check - but don't fail if it doesn't resolve
             try:
                 socket.gethostbyname(hostname)
                 logger.info(f"Successfully resolved hostname: {hostname}")
-            except socket.gaierror:
-                logger.error(f"Could not resolve hostname: {hostname}")
-                logger.error("This may indicate network connectivity issues or that the Neo4j instance doesn't exist")
-                raise
+            except socket.gaierror as dns_error:
+                logger.warning(f"Could not resolve hostname: {hostname}. Error: {str(dns_error)}")
+                logger.warning("Continuing anyway as this might be a temporary DNS issue or network configuration")
         except Exception as e:
-            logger.error(f"Error parsing hostname from URI: {str(e)}")
-            raise
+            logger.warning(f"Error parsing hostname from URI: {str(e)}")
+            logger.warning("Continuing with connection attempt anyway")
         
-        try:
-            logger.info(f"Connecting to Neo4j with URI: {NEO4J_URI}")
-            
-            # Create driver with SSL encryption enabled
-            self.driver = GraphDatabase.driver(
-                NEO4J_URI, 
-                auth=basic_auth(NEO4J_USERNAME, NEO4J_PASSWORD),
-                encrypted=True,
-                trust="TRUST_ALL_CERTIFICATES"
-            )
-            
-            # Test connection with simple query
-            with self.driver.session() as session:
-                result = session.run("RETURN 'Connected!' AS message")
-                message = result.single()["message"]
-                logger.info(f"Connection test result: {message}")
+        # Connection retry logic
+        max_retries = 3
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < max_retries:
+            try:
+                logger.info(f"Connecting to Neo4j with URI: {NEO4J_URI} (Attempt {retry_count + 1}/{max_retries})")
                 
-            logger.info("Connected to Neo4j database")
-        except Exception as e:
-            logger.error(f"Failed to connect to Neo4j: {str(e)}")
-            logger.error("Please check if:")
-            logger.error("1. Your Neo4j AuraDB instance is active (not paused)")
-            logger.error("2. Credentials in .env are correct")
-            logger.error("3. Network connectivity to Neo4j is available")
-            logger.error("4. Visit Neo4j AuraDB dashboard to ensure instance is running")
-            raise
+                # Create driver with SSL encryption enabled but more permissive settings
+                self.driver = GraphDatabase.driver(
+                    NEO4J_URI, 
+                    auth=basic_auth(NEO4J_USERNAME, NEO4J_PASSWORD),
+                    encrypted=True,
+                    trust="TRUST_ALL_CERTIFICATES"
+                )
+                
+                # Test connection with simple query and a short timeout
+                with self.driver.session() as session:
+                    result = session.run("RETURN 'Connected!' AS message")
+                    message = result.single()["message"]
+                    logger.info(f"Connection test result: {message}")
+                    
+                logger.info("Successfully connected to Neo4j database")
+                return  # Success - exit the method
+                
+            except Exception as e:
+                last_error = e
+                retry_count += 1
+                logger.warning(f"Connection attempt {retry_count}/{max_retries} failed: {str(e)}")
+                if retry_count < max_retries:
+                    logger.info(f"Retrying in 2 seconds...")
+                    time.sleep(2)  # Wait before retrying
+        
+        # If we get here, all retries failed
+        logger.error(f"Failed to connect to Neo4j after {max_retries} attempts. Last error: {str(last_error)}")
+        logger.error("Please check if:")
+        logger.error("1. Your Neo4j AuraDB instance is active (not paused)")
+        logger.error("2. Credentials in environment variables are correct")
+        logger.error("3. Network connectivity to Neo4j is available")
+        logger.error("4. Visit Neo4j AuraDB dashboard to ensure instance is running")
+        raise last_error
     
     def close(self):
         """Close the Neo4j driver connection."""
@@ -575,13 +591,23 @@ def get_db_manager():
     """Get or create the Neo4j database manager singleton."""
     global db_manager
     if db_manager is None:
-        db_manager = Neo4jManager()
+        try:
+            db_manager = Neo4jManager()
+            logger.info("Successfully created Neo4j database manager")
+        except Exception as e:
+            logger.error(f"Failed to create Neo4j database manager: {str(e)}")
+            raise
     return db_manager
 
 def init_db():
     """Initialize the database."""
-    manager = get_db_manager()
-    manager.init_db()
+    try:
+        manager = get_db_manager()
+        manager.init_db()
+        logger.info("Successfully initialized Neo4j database")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {str(e)}")
+        raise
 
 def add_new_user(username, nationality):
     """Add a new user."""

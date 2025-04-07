@@ -24,12 +24,12 @@ import numpy as np  # Required for cosine_similarity
 
 from neo4j_manager import (
     init_db, add_new_user, get_user_by_username,
-    log_sorting_attempt, log_chat, log_image_recognition
+    log_sorting_attempt, log_chat, log_image_recognition, get_db_manager
 )
 
 # === Configuration ===
 app = Flask(__name__, static_folder='static')
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 
@@ -90,14 +90,18 @@ def login():
         if not username or not nationality:
             return jsonify({'error': 'Username and nationality required'}), 400
         
-        user_record = get_user_by_username(username)
-        if user_record:
-            session['user_id'] = user_record['user_id']
-            session['username'] = user_record['username']
-        else:
-            user_id = add_new_user(username, nationality)
-            session['user_id'] = user_id
-            session['username'] = username
+        try:
+            user_record = get_user_by_username(username)
+            if user_record:
+                session['user_id'] = user_record['user_id']
+                session['username'] = user_record['username']
+            else:
+                user_id = add_new_user(username, nationality)
+                session['user_id'] = user_id
+                session['username'] = username
+        except Exception as e:
+            logger.error(f"Database error during login: {str(e)}")
+            return jsonify({'error': 'Database connection error. Please try again later.'}), 500
         
         return redirect(url_for('index'))
     return render_template('login.html')
@@ -107,7 +111,27 @@ def index():
     """Main page with login check"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template('index.html')
+    return render_template('index.html', username=session.get('username', 'Guest'))
+
+@app.route('/db_status')
+def db_status():
+    """Check database connection status"""
+    try:
+        db_manager = get_db_manager()
+        # Test connection with a simple query
+        with db_manager.driver.session() as session:
+            result = session.run("RETURN 'Connected!' AS message")
+            message = result.single()["message"]
+        return jsonify({
+            'status': 'connected',
+            'message': message
+        })
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 # === Sorting Game ===
 class UserPerformance:
@@ -178,8 +202,12 @@ def check_answer():
         correct_container = waste_map.get(item, {}).get('container', '')
         is_correct = selected_container == correct_container
         
-        log_sorting_attempt(session['user_id'], item, selected_container, 
-                          correct_container, is_correct)
+        try:
+            log_sorting_attempt(session['user_id'], item, selected_container, 
+                              correct_container, is_correct)
+        except Exception as e:
+            logger.error(f"Error logging sorting attempt: {str(e)}")
+            # Continue even if logging fails
         
         session['user_data']['total_attempts'] += 1
         if is_correct:
@@ -294,8 +322,8 @@ def chat():
         context = ConversationContext()
         response = generate_response(user_message, context)
         
-        # Log chat to Neo4j
         try:
+            # Log chat to Neo4j
             log_chat(session['user_id'], user_message, response)
         except Exception as e:
             logger.error(f"Failed to log chat: {str(e)}")
@@ -429,7 +457,11 @@ def verify_prediction():
     agreement = predicted == user_choice
     image_path = session.get('last_image_path', 'unknown')
     
-    log_image_recognition(session['user_id'], image_path, predicted, user_choice, agreement)
+    try:
+        log_image_recognition(session['user_id'], image_path, predicted, user_choice, agreement)
+    except Exception as e:
+        logger.error(f"Error logging image recognition: {str(e)}")
+        # Continue even if logging fails
     
     feedback = (
         f"Great! You and the AI agree on {predicted}." if agreement else
@@ -440,6 +472,14 @@ def verify_prediction():
 
 # === Main Execution ===
 if __name__ == '__main__':
-    init_db()
+    try:
+        init_db()
+        logger.info("Neo4j database initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization error: {str(e)}")
+        # Continue running even if database initialization fails
+        # This will allow the app to start and show an error message to users
+        # rather than failing to start completely
+    
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False)
