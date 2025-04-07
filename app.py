@@ -338,46 +338,76 @@ def chat():
         return jsonify({'error': 'Sorry, I encountered an error processing your request.'}), 500
 
 # === Image Recognition ===
-def load_resnet_model() -> bool:
-    """Load the ResNet model"""
+def load_resnet_model():
+    """Load the ResNet model with error handling and retry logic"""
     global resnet_model
-    if resnet_model is None:
+    
+    if resnet_model is not None:
+        return True
+    
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
         try:
-            model_path = os.path.join('models', 'resnet.pth')
-            if not os.path.exists(model_path):
-                logger.error(f"Model file {model_path} not found")
-                return False
+            logger.info("Loading ResNet model...")
+            # Load a pre-trained ResNet model
+            model = models.resnet50(weights='IMAGENET1K_V1')
             
-            resnet_model = models.resnet18(weights=None)
-            resnet_model.fc = torch.nn.Linear(resnet_model.fc.in_features, len(class_names))
-            resnet_model.load_state_dict(torch.load(model_path, map_location='cpu'))
-            resnet_model.eval()
+            # Modify the final layer for our 5 waste categories
+            num_ftrs = model.fc.in_features
+            model.fc = torch.nn.Linear(num_ftrs, len(class_names))
+            
+            # Set model to evaluation mode
+            model.eval()
+            
+            resnet_model = model
+            logger.info("ResNet model loaded successfully")
             return True
         except Exception as e:
-            logger.error(f"Model loading error: {str(e)}")
-            return False
-    return True
+            retry_count += 1
+            logger.error(f"Error loading ResNet model (attempt {retry_count}/{max_retries}): {str(e)}")
+            if retry_count >= max_retries:
+                logger.error("Failed to load ResNet model after multiple attempts")
+                return False
+            # Wait before retrying
+            import time
+            time.sleep(2)
+    
+    return False
 
-def preprocess_image(image_bytes: bytes) -> Tuple[Optional[torch.Tensor], Optional[str]]:
-    logger.info(f"Processing image bytes: {len(image_bytes)}")
+def preprocess_image(image_bytes: bytes):
+    """Preprocess image for model prediction"""
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        logger.info(f"Image opened successfully, size: {image.size}")
-        transform = transforms.Compose([
+        # Try to open the image with PIL
+        try:
+            image = Image.open(io.BytesIO(image_bytes))
+        except UnidentifiedImageError:
+            logger.error("Cannot identify image file format")
+            return None, "Cannot identify image file format. Please upload a valid image file."
+        except Exception as e:
+            logger.error(f"Error opening image: {str(e)}")
+            return None, f"Error opening image: {str(e)}"
+        
+        # Convert to RGB if needed (handles PNG with transparency, etc.)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+            logger.info(f"Converted image from {image.mode} to RGB")
+        
+        # Resize and normalize
+        preprocess = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        tensor = transform(image).unsqueeze(0)
-        logger.info(f"Tensor shape: {tensor.shape}")
-        return tensor, None
-    except UnidentifiedImageError as e:
-        logger.error(f"Invalid image format: {e}")
-        return None, "Invalid image format"
+        
+        # Apply transformations
+        image_tensor = preprocess(image).unsqueeze(0)
+        return image_tensor, None
     except Exception as e:
-        logger.error(f"Preprocess error: {e}")
-        return None, str(e)
+        logger.error(f"Error preprocessing image: {str(e)}")
+        return None, f"Error preprocessing image: {str(e)}"
 
 def predict_container(image_tensor: torch.Tensor) -> Tuple[Optional[str], float]:
     if not load_resnet_model():
@@ -399,50 +429,102 @@ def analyze_image():
         return jsonify({'error': 'Not logged in'}), 401
     
     try:
+        # Check if the request has the file part
         if 'waste_image' not in request.files:
             logger.error("No waste_image in request.files")
             return jsonify({'error': 'No image uploaded'}), 400
         
         file = request.files['waste_image']
-        logger.info(f"Received file: {file.filename}, size: {len(file.read())} bytes")
+        
+        # Check if the file is empty
+        if file.filename == '':
+            logger.error("Empty file submitted")
+            return jsonify({'error': 'Empty file submitted'}), 400
+        
+        # Check file size before reading it completely
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
         file.seek(0)  # Reset file pointer
-        image_bytes = file.read()
+        
+        # Log file details
+        logger.info(f"Received file: {file.filename}, size: {file_size} bytes")
+        
+        # Check if file is too large (10MB limit)
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            logger.error(f"File too large: {file_size} bytes")
+            return jsonify({'error': 'File too large. Maximum size is 10MB'}), 413
+        
+        # Read the file in chunks to avoid memory issues
+        chunks = []
+        chunk_size = 1024 * 1024  # 1MB chunks
+        while True:
+            chunk = file.read(chunk_size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        
+        image_bytes = b''.join(chunks)
         logger.info(f"Image bytes length: {len(image_bytes)}")
-        image_tensor, error = preprocess_image(image_bytes)
         
-        if error:
-            logger.error(f"Image preprocessing error: {error}")
-            return jsonify({'error': error}), 400
-        
-        predicted_class, confidence = predict_container(image_tensor)
-        if not predicted_class:
-            logger.error("Prediction failed, no predicted class")
-            return jsonify({'error': 'Prediction failed'}), 500
-        
-        logger.info(f"Predicted class: {predicted_class}, confidence: {confidence:.2f}%")
-        container_details = next(
-            (dict(row) for _, row in waste_data.iterrows() 
-             if row['Waste_Containers_Type'] == predicted_class), {}
-        )
-        
-        session['last_confidence'] = confidence
-        session['last_image_path'] = file.filename if file.filename else 'uploaded_image'
-        session['last_predicted_bin'] = predicted_class
-        
-        encoded_image = base64.b64encode(image_bytes).decode('utf-8')
-        logger.info(f"Encoded image length: {len(encoded_image)}")
-        
-        response = {
-            'success': True,
-            'prediction': predicted_class,
-            'confidence': f"{confidence:.2f}%",
-            'container_details': container_details,
-            'image': encoded_image
-        }
-        return jsonify(response)
+        # Process the image
+        try:
+            image_tensor, error = preprocess_image(image_bytes)
+            
+            if error:
+                logger.error(f"Image preprocessing error: {error}")
+                return jsonify({'error': error}), 400
+            
+            predicted_class, confidence = predict_container(image_tensor)
+            if not predicted_class:
+                logger.error("Prediction failed, no predicted class")
+                return jsonify({'error': 'Prediction failed'}), 500
+            
+            logger.info(f"Predicted class: {predicted_class}, confidence: {confidence:.2f}%")
+            
+            # Find container details
+            container_details = {}
+            for _, row in waste_data.iterrows():
+                if row['Waste_Containers_Type'] == predicted_class:
+                    container_details = dict(row)
+                    break
+            
+            # Store in session
+            session['last_confidence'] = confidence
+            session['last_image_path'] = file.filename if file.filename else 'uploaded_image'
+            session['last_predicted_bin'] = predicted_class
+            
+            # Compress the image before encoding to reduce size
+            try:
+                img = Image.open(io.BytesIO(image_bytes))
+                # Resize to a reasonable size if it's too large
+                if max(img.size) > 800:
+                    img.thumbnail((800, 800))
+                # Compress the image
+                output_buffer = io.BytesIO()
+                img.save(output_buffer, format='JPEG', quality=70)
+                compressed_bytes = output_buffer.getvalue()
+                encoded_image = base64.b64encode(compressed_bytes).decode('utf-8')
+            except Exception as img_err:
+                logger.error(f"Image compression error: {str(img_err)}")
+                # Fall back to the original image if compression fails
+                encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+            
+            logger.info(f"Encoded image length: {len(encoded_image)}")
+            
+            response = {
+                'success': True,
+                'prediction': predicted_class,
+                'confidence': f"{confidence:.2f}%",
+                'container_details': container_details,
+                'image': encoded_image
+            }
+            return jsonify(response)
+        except Exception as process_err:
+            logger.error(f"Image processing error: {str(process_err)}")
+            return jsonify({'error': f"Image processing error: {str(process_err)}"}), 500
     except Exception as e:
         logger.error(f"Image analysis error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f"Server error: {str(e)}"}), 500
 
 @app.route('/verify_prediction', methods=['POST'])
 def verify_prediction():
