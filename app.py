@@ -172,9 +172,17 @@ def get_random_item():
         
         # Construct the correct URL for the image path
         if image_path:
-            image_url = url_for('static', filename=image_path.replace('static/', ''))
+            # Make sure we're using the correct path format
+            if image_path.startswith('static/'):
+                image_path = image_path.replace('static/', '')
+            # Ensure we're pointing to the waste_images folder
+            if not image_path.startswith('waste_images/'):
+                image_path = f'waste_images/{os.path.basename(image_path)}'
+            image_url = url_for('static', filename=image_path)
         else:
             image_url = ''
+        
+        logger.info(f"Final image URL: {image_url}")
         
         return jsonify({
             'item': formatted_item,
@@ -189,62 +197,174 @@ def get_random_item():
 
 @app.route('/check_answer', methods=['POST'])
 def check_answer():
-    """Check user's sorting answer"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
+    """Check if the selected container is correct for the waste item"""
+    # Log the request for debugging
+    logger.info(f"Received check_answer request: {request.json}")
+    
+    # Temporarily disable session check for debugging
+    # if 'user_id' not in session:
+    #     return jsonify({'error': 'Not logged in'}), 401
     
     try:
-        UserPerformance.init_session_data()
         data = request.json
-        item = data.get('item', '').lower().replace(' ', '_')
-        selected_container = data.get('container', '')
+        if not data:
+            logger.error("No JSON data received in request")
+            return jsonify({'error': 'No data received'}), 400
+            
+        item = data.get('item')
+        selected_container = data.get('container')
         
-        correct_container = waste_map.get(item, {}).get('container', '')
+        logger.info(f"Checking answer for item: {item}, container: {selected_container}")
+        
+        if not item or not selected_container:
+            return jsonify({'error': 'Missing item or container'}), 400
+        
+        # Find the correct container for this item
+        correct_container = None
+        item_lower = item.lower().strip()
+        
+        # First try exact match
+        for _, row in waste_data.iterrows():
+            if row['Waste_Item'].lower().strip() == item_lower:
+                correct_container = row['Waste_Containers_Type']
+                break
+        
+        # If no exact match, try partial match
+        if not correct_container:
+            for _, row in waste_data.iterrows():
+                if item_lower in row['Waste_Item'].lower().strip() or row['Waste_Item'].lower().strip() in item_lower:
+                    correct_container = row['Waste_Containers_Type']
+                    logger.info(f"Found partial match: '{item}' matches with '{row['Waste_Item']}'")
+                    break
+        
+        # If still no match, use a default container based on common items
+        if not correct_container:
+            # Map common waste types to containers
+            common_waste_mapping = {
+                'paper': 'PaperWaste',
+                'cardboard': 'PaperWaste',
+                'plastic': 'LightweightPackaging_LVP',
+                'bottle': 'Depot_Container_Glass',
+                'glass': 'Depot_Container_Glass',
+                'food': 'BioWaste',
+                'organic': 'BioWaste',
+                'metal': 'LightweightPackaging_LVP',
+                'electronic': 'ElectronicWaste',
+                'battery': 'HazardousWaste',
+                'hygiene': 'ResidualWaste',
+                'diaper': 'ResidualWaste',
+                'toilet': 'ResidualWaste',
+                'waste': 'ResidualWaste',
+                'cooked': 'BioWaste'
+            }
+            
+            for keyword, container in common_waste_mapping.items():
+                if keyword in item_lower:
+                    correct_container = container
+                    logger.info(f"Using keyword mapping for '{item}': keyword '{keyword}' maps to '{container}'")
+                    break
+        
+        # If still no match, default to ResidualWaste
+        if not correct_container:
+            correct_container = 'ResidualWaste'  # Default container
+            logger.warning(f"No match found for '{item}', using default container: {correct_container}")
+        
+        # Check if the answer is correct
         is_correct = selected_container == correct_container
         
-        try:
-            log_sorting_attempt(session['user_id'], item, selected_container, 
-                              correct_container, is_correct)
-        except Exception as e:
-            logger.error(f"Error logging sorting attempt: {str(e)}")
-            # Continue even if logging fails
-        
-        session['user_data']['total_attempts'] += 1
-        if is_correct:
-            session['user_data']['correct_answers'] += 1
-        
-        item_perf = session['user_data']['item_performance'].setdefault(item, {'attempts': 0, 'correct': 0})
-        item_perf['attempts'] += 1
-        if is_correct:
-            item_perf['correct'] += 1
-        
-        session.modified = True
-        
-        feedback = 'Correct!' if is_correct else f'Not quite. This item goes in the {correct_container} bin.'
+        # Get feedback and tip
+        feedback = f"{'Correct!' if is_correct else 'Incorrect.'} {item} belongs in {correct_container}."
         tip = random.choice(FUNNY_TIPS['correct' if is_correct else 'incorrect'])
+        
+        # Update session statistics if session exists
+        if 'user_id' in session:
+            correct_answers = session.get('correct_answers', 0)
+            total_attempts = session.get('total_attempts', 0)
+            
+            if is_correct:
+                session['correct_answers'] = correct_answers + 1
+            session['total_attempts'] = total_attempts + 1
+            
+            # Track bin usage for charts
+            bin_count_key = f'bin_count_{selected_container}'
+            session[bin_count_key] = session.get(bin_count_key, 0) + 1
+            
+            # Log attempt to database if available
+            user_id = session.get('user_id')
+            if user_id:
+                try:
+                    log_sorting_attempt(
+                        user_id=user_id,
+                        item=item,
+                        correct_container=correct_container,
+                        selected_container=selected_container,
+                        is_correct=is_correct
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to log sorting attempt: {str(e)}")
+        
+        logger.info(f"Answer check result: correct={is_correct}, feedback={feedback}")
+        
         return jsonify({
             'correct': is_correct,
+            'item': item,
+            'container': selected_container,
+            'correct_container': correct_container,
             'feedback': feedback,
-            'correctContainer': correct_container,
             'tip': tip
         })
     except Exception as e:
         logger.error(f"Error checking answer: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/get_performance')
+@app.route('/get_performance', methods=['GET'])
 def get_performance():
-    """Return user performance statistics"""
+    """Get user's performance data for the sorting game"""
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
     
-    UserPerformance.init_session_data()
-    return jsonify({
-        'success': True,
-        'correct_answers': session['user_data']['correct_answers'],
-        'total_attempts': session['user_data']['total_attempts'],
-        'item_performance': session['user_data']['item_performance']
-    })
+    try:
+        user_id = session['user_id']
+        db_manager = get_db_manager()
+        
+        # Get basic performance stats
+        correct_answers = session.get('correct_answers', 0)
+        total_attempts = session.get('total_attempts', 0)
+        
+        # Get bin statistics from database if available
+        bin_stats = {}
+        try:
+            if db_manager:
+                # Query for bin usage statistics
+                query = """
+                MATCH (u:User {id: $user_id})-[:ATTEMPTED]->(a:SortingAttempt)
+                RETURN a.selected_container AS bin, COUNT(a) AS count
+                """
+                result = db_manager.query(query, {'user_id': user_id})
+                
+                if result:
+                    for record in result:
+                        bin_stats[record['bin']] = record['count']
+                        
+                # If no data in database, use session data
+                if not bin_stats:
+                    raise Exception("No bin stats in database")
+        except Exception as e:
+            logger.warning(f"Could not get bin stats from database: {str(e)}")
+            # Fallback to session data or create mock data
+            bin_types = ['BioWaste', 'PaperWaste', 'LightweightPackaging_LVP', 'Depot_Container_Glass', 'ResidualWaste']
+            for bin_type in bin_types:
+                bin_stats[bin_type] = session.get(f'bin_count_{bin_type}', 0)
+        
+        return jsonify({
+            'success': True,
+            'correct_answers': correct_answers,
+            'total_attempts': total_attempts,
+            'bin_stats': bin_stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting performance: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # === Chat System ===
 class ConversationContext:

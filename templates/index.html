@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Trash AI</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <video autoplay muted loop class="bg-video" onloadedmetadata="this.play();">
@@ -24,39 +24,140 @@
 
         <!-- Sorting Game Tab -->
         <section id="game-tab" class="tab-content active">
-            <div class="game-container">
-                <div class="performance-tracker">
-                    <span>Score: <span id="score" class="score">0/0</span></span> | 
-                    <span>Accuracy: <span id="accuracy" class="accuracy">0%</span></span>
+            <div id="sorting-game" class="tab-content active">
+                <div class="sorting-game-container">
+                    <div class="game-header">
+                        <!-- Performance stats section removed as requested -->
+                    </div>
+                    
+                    <div class="game-main-content">
+                        <div class="item-display-container">
+                            <div class="item-orb" id="item-display" data-correct-bin="">
+                                <img id="waste-display-image" src="" alt="Waste item image">
+                                <span class="item-text">Loading item...</span>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-companion-container">
+                            <div class="ai-message-bubble">
+                                <p id="ai-feedback">Choose the correct bin for this item!</p>
+                            </div>
+                            <div class="ai-robot">
+                                <img src="{{ url_for('static', filename='assets/ai-robot.svg') }}" alt="AI Robot">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-section">
+                        <div class="chart-container">
+                            <h3>Eco-Impact</h3>
+                            <div class="eco-impact-container">
+                                <div class="eco-level">
+                                    <div class="level-indicator">
+                                        <div class="level-progress" id="level-progress"></div>
+                                    </div>
+                                    <div class="level-text">
+                                        <span class="level-label">Level</span>
+                                        <span class="level-value" id="user-level">1</span>
+                                    </div>
+                                </div>
+                                <div class="eco-badges" id="eco-badges">
+                                    <!-- Badges will be added by JavaScript -->
+                                    <div class="badge locked" data-badge="recycler">
+                                        <div class="badge-icon"></div>
+                                        <span class="badge-name">Recycler</span>
+                                    </div>
+                                    <div class="badge locked" data-badge="eco-warrior">
+                                        <div class="badge-icon"></div>
+                                        <span class="badge-name">Eco-Warrior</span>
+                                    </div>
+                                    <div class="badge locked" data-badge="waste-master">
+                                        <div class="badge-icon"></div>
+                                        <span class="badge-name">Waste Master</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <h3>Waste Expertise</h3>
+                            <div class="waste-expertise-container">
+                                <div class="expertise-categories" id="expertise-categories">
+                                    <!-- Category bars will be added by JavaScript -->
+                                    <div class="expertise-category">
+                                        <div class="category-label">Bio</div>
+                                        <div class="category-bar">
+                                            <div class="category-progress" data-category="BioWaste" style="width: 10%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="expertise-category">
+                                        <div class="category-label">Paper</div>
+                                        <div class="category-bar">
+                                            <div class="category-progress" data-category="PaperWaste" style="width: 10%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="expertise-category">
+                                        <div class="category-label">Packaging</div>
+                                        <div class="category-bar">
+                                            <div class="category-progress" data-category="LightweightPackaging_LVP" style="width: 10%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="expertise-category">
+                                        <div class="category-label">Glass</div>
+                                        <div class="category-bar">
+                                            <div class="category-progress" data-category="Depot_Container_Glass" style="width: 10%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="expertise-category">
+                                        <div class="category-label">Residual</div>
+                                        <div class="category-bar">
+                                            <div class="category-progress" data-category="ResidualWaste" style="width: 10%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="expertise-stats">
+                                    <div class="stat-detail">
+                                        <span class="detail-label">Streak</span>
+                                        <span class="detail-value" id="current-streak">0</span>
+                                    </div>
+                                    <div class="stat-detail">
+                                        <span class="detail-label">Accuracy</span>
+                                        <span class="detail-value" id="accuracy-value">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bin-selection-container">
+                        <div class="bin-orbit">
+                            <div class="mini-bin" data-bin="BioWaste">
+                                <div class="bin-icon bio"></div>
+                                <span class="bin-name">Bio Waste</span>
+                            </div>
+                            <div class="mini-bin" data-bin="PaperWaste">
+                                <div class="bin-icon paper"></div>
+                                <span class="bin-name">Paper</span>
+                            </div>
+                            <div class="mini-bin" data-bin="LightweightPackaging_LVP">
+                                <div class="bin-icon plastic"></div>
+                                <span class="bin-name">Packaging</span>
+                            </div>
+                            <div class="mini-bin" data-bin="Depot_Container_Glass">
+                                <div class="bin-icon glass"></div>
+                                <span class="bin-name">Glass</span>
+                            </div>
+                            <div class="mini-bin" data-bin="ResidualWaste">
+                                <div class="bin-icon residual"></div>
+                                <span class="bin-name">Residual</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="game-controls">
+                        <button id="next-item" class="neon-button">Next Challenge</button>
+                        <div id="feedback" class="feedback"></div>
+                    </div>
                 </div>
-                <div class="item-orb" id="item-display">
-                    <img id="waste-display-image" src="" alt="Waste Item" style="display: none; max-width: 200px; margin-bottom: 10px;">
-                    <span class="item-text"></span>
-                </div>
-                <div class="bin-galaxy">
-                    <div class="mini-bin bio" data-bin="BioWaste">
-                        <div class="bin-color"></div>
-                        <span class="bin-name">BioWaste</span>
-                    </div>
-                    <div class="mini-bin paper" data-bin="PaperWaste">
-                        <div class="bin-color"></div>
-                        <span class="bin-name">Paper Waste</span>
-                    </div>
-                    <div class="mini-bin plastic" data-bin="LightweightPackaging_LVP">
-                        <div class="bin-color"></div>
-                        <span class="bin-name">Packaging</span>
-                    </div>
-                    <div class="mini-bin glass" data-bin="Depot_Container_Glass">
-                        <div class="bin-color"></div>
-                        <span class="bin-name">Glass</span>
-                    </div>
-                    <div class="mini-bin residual" data-bin="ResidualWaste">
-                        <div class="bin-color"></div>
-                        <span class="bin-name">Residual</span>
-                    </div>
-                </div>
-                <div id="feedback" class="feedback"></div>
-                <button id="next-item" class="futuristic-btn pulse">Next Challenge</button>
             </div>
         </section>
 
